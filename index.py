@@ -1,8 +1,10 @@
 import os
 import requests
 import datetime
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template_string
 from pymongo import MongoClient
+from io import BytesIO
+import httpx
 
 # Configuration
 app = Flask(__name__)
@@ -23,19 +25,57 @@ if not TELEGRAM_API_TOKEN:
     raise ValueError("TELEGRAM_API_TOKEN environment variable is not set")
 TELEGRAM_API_URL = f'https://api.telegram.org/bot{TELEGRAM_API_TOKEN}'
 
+# Azure OpenAI configuration
+AZURE_OPENAI_ENDPOINT = os.getenv('AZURE_OPENAI_ENDPOINT', 'https://opendalle.openai.azure.com/')
+AZURE_OPENAI_API_KEY = os.getenv('AZURE_OPENAI_API_KEY')
+if not AZURE_OPENAI_API_KEY:
+    raise ValueError("AZURE_OPENAI_API_KEY environment variable is not set")
+
 def send_message(chat_id, text):
     url = f'{TELEGRAM_API_URL}/sendMessage'
     response = requests.post(url, data={'chat_id': chat_id, 'text': text})
     return response.json()
 
-def get_openai_response(query):
-    # Implement your OpenAI interaction here
-    return "This is a placeholder response from OpenAI."
+def send_image(chat_id, image_url):
+    url = f'{TELEGRAM_API_URL}/sendPhoto'
+    response = requests.post(url, data={'chat_id': chat_id, 'photo': image_url})
+    return response.json()
 
-def process_dalle_request(query, model):
-    # Implement your DALL-E interaction here
-    # For example purposes, return a placeholder URL
-    return "https://example.com/generated_image.png"
+def get_openai_response(query):
+    headers = {
+        'Content-Type': 'application/json',
+        'api-key': AZURE_OPENAI_API_KEY,
+    }
+    payload = {
+        "prompt": query,
+        "max_tokens": 150,
+        "temperature": 0.7,
+        "top_p": 0.95,
+    }
+    response = httpx.post(f'{AZURE_OPENAI_ENDPOINT}/openai/deployments/davinci-codex/completions', headers=headers, json=payload)
+    response.raise_for_status()
+    result = response.json()
+    return result['choices'][0]['text'].strip()
+
+def generate_dalle_image(prompt):
+    headers = {
+        'Content-Type': 'application/json',
+        'api-key': AZURE_OPENAI_API_KEY,
+    }
+    data = {
+        "prompt": prompt,
+        "n": 1,
+        "size": "1024x1024"
+    }
+    response = httpx.post(f'{AZURE_OPENAI_ENDPOINT}/openai/images/generations:generate', headers=headers, json=data)
+    response.raise_for_status()
+    result = response.json()
+    image_url = result['data'][0]['url']
+    return image_url
+
+@app.route('/', methods=['GET'])
+def home():
+    return render_template_string("<html><body><h1>@Dhanrakshak</h1></body></html>")
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
@@ -59,19 +99,19 @@ def webhook():
         elif text.startswith('/dalle2'):
             query = text[len('/dalle2 '):].strip()
             if query:
-                image_url = process_dalle_request(query, 'dalle2')
-                send_message(chat_id, f"Image URL: {image_url}")
+                image_url = generate_dalle_image(query)
+                send_image(chat_id, image_url)
             else:
                 send_message(chat_id, "Please provide a query after the /dalle2 command.")
         elif text.startswith('/image'):
             query = text[len('/image '):].strip()
             if query:
-                image_url = process_dalle_request(query, 'image')
-                send_message(chat_id, f"Image URL: {image_url}")
+                image_url = generate_dalle_image(query)
+                send_image(chat_id, image_url)
             else:
                 send_message(chat_id, "Please provide a query after the /image command.")
         elif text == '/start':
-            send_message(chat_id, "I am working")
+            send_message(chat_id, "Bot is Working")
 
         # Store the message in MongoDB
         collection.insert_one({
