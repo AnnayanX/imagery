@@ -1,6 +1,5 @@
 from flask import Flask, request, jsonify
-import os
-from openai import send_message, process_dalle_request, get_openai_response
+from openai import process_dalle_request, get_openai_response, send_message
 
 app = Flask(__name__)
 
@@ -29,13 +28,15 @@ def webhook():
         elif text.startswith('/dalle2'):
             query = text[len('/dalle2 '):].strip()
             if query:
-                process_dalle_request(query, 'dalle2', chat_id)
+                image_url = process_dalle_request(query, 'dalle2', chat_id)
+                send_message(chat_id, f"Image URL: {image_url}")
             else:
                 send_message(chat_id, "Please provide a query after the /dalle2 command.")
         elif text.startswith('/image'):
             query = text[len('/image '):].strip()
             if query:
-                process_dalle_request(query, 'image', chat_id)
+                image_url = process_dalle_request(query, 'image', chat_id)
+                send_message(chat_id, f"Image URL: {image_url}")
             else:
                 send_message(chat_id, "Please provide a query after the /image command.")
         elif text == '/start':
