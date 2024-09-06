@@ -1,17 +1,25 @@
+import os
+import requests
 from flask import Flask, request, jsonify
 from pymongo import MongoClient
-import os
+from openai import get_openai_response, process_dalle_request, send_message
 
 app = Flask(__name__)
 
-# MongoDB connection setup
-client = MongoClient(os.getenv('MONGO_DB_URL'))
-db = client['your_database']
-collection = db['your_collection']
+# MongoDB configuration
+MONGO_URI = os.getenv('MONGO_URI')
+client = MongoClient(MONGO_URI)
+db = client.get_database()  # Use default database or specify one
+collection = db.get_collection('messages')  # Specify your collection
 
-@app.route('/')
-def index():
-    return '@Dhanrakshak'
+# Telegram API configuration
+TELEGRAM_API_TOKEN = os.getenv('TELEGRAM_API_TOKEN')
+TELEGRAM_API_URL = f'https://api.telegram.org/bot{TELEGRAM_API_TOKEN}'
+
+def send_message(chat_id, text):
+    url = f'{TELEGRAM_API_URL}/sendMessage'
+    response = requests.post(url, data={'chat_id': chat_id, 'text': text})
+    return response.json()
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
@@ -35,8 +43,6 @@ def webhook():
             query = text[len('/dalle2 '):].strip()
             if query:
                 image_url = process_dalle_request(query, 'dalle2', chat_id)
-                # Save image URL to MongoDB
-                collection.insert_one({'chat_id': chat_id, 'image_url': image_url, 'command': 'dalle2'})
                 send_message(chat_id, f"Image URL: {image_url}")
             else:
                 send_message(chat_id, "Please provide a query after the /dalle2 command.")
@@ -44,13 +50,19 @@ def webhook():
             query = text[len('/image '):].strip()
             if query:
                 image_url = process_dalle_request(query, 'image', chat_id)
-                # Save image URL to MongoDB
-                collection.insert_one({'chat_id': chat_id, 'image_url': image_url, 'command': 'image'})
                 send_message(chat_id, f"Image URL: {image_url}")
             else:
                 send_message(chat_id, "Please provide a query after the /image command.")
         elif text == '/start':
             send_message(chat_id, "I am working")
+
+        # Store the message in MongoDB
+        collection.insert_one({
+            'chat_id': chat_id,
+            'text': text,
+            'processed_at': datetime.datetime.utcnow()
+        })
+
     except Exception as e:
         send_message(chat_id, f"Error processing message: {e}")
 
