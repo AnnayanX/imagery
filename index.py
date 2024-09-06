@@ -1,20 +1,8 @@
 from flask import Flask, request, jsonify
 import os
-import requests
-import time
+from openai import send_message, process_dalle_request, get_openai_response
 
 app = Flask(__name__)
-
-# Import functions from openai.py
-from openai import send_message, get_openai_response
-
-# Access environment variables set in Vercel
-TELEGRAM_API_TOKEN = os.getenv('TELEGRAM_API_TOKEN')
-OPENAI_ENDPOINT = os.getenv('OPENAI_ENDPOINT')
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
-CHAT_ID = os.getenv('CHAT_ID')  # Chat ID for sending error messages
-
-TELEGRAM_API_URL = f'https://api.telegram.org/bot{TELEGRAM_API_TOKEN}'
 
 @app.route('/')
 def index():
@@ -23,17 +11,14 @@ def index():
 @app.route('/webhook', methods=['POST'])
 def webhook():
     data = request.get_json()
-
-    # Extract chat_id and message text
     chat_id = data.get('message', {}).get('chat', {}).get('id')
     text = data.get('message', {}).get('text', '')
 
     if not chat_id or not text:
-        send_message(CHAT_ID, "Received invalid data in webhook")
+        send_message(chat_id, "Received invalid data in webhook")
         return jsonify(success=False), 400
 
     try:
-        # Check if the message starts with the '/ask' command
         if text.startswith('/ask'):
             query = text[len('/ask '):].strip()
             if query:
@@ -41,10 +26,22 @@ def webhook():
                 send_message(chat_id, answer)
             else:
                 send_message(chat_id, "Please provide a query after the /ask command.")
+        elif text.startswith('/dalle2'):
+            query = text[len('/dalle2 '):].strip()
+            if query:
+                process_dalle_request(query, 'dalle2', chat_id)
+            else:
+                send_message(chat_id, "Please provide a query after the /dalle2 command.")
+        elif text.startswith('/image'):
+            query = text[len('/image '):].strip()
+            if query:
+                process_dalle_request(query, 'image', chat_id)
+            else:
+                send_message(chat_id, "Please provide a query after the /image command.")
         elif text == '/start':
             send_message(chat_id, "I am working")
     except Exception as e:
-        send_message(CHAT_ID, f"Error processing message: {e}")
+        send_message(chat_id, f"Error processing message: {e}")
 
     return jsonify(success=True)
 
