@@ -1,10 +1,10 @@
 import os
-import requests
-import datetime
+import httpx
 from flask import Flask, request, jsonify, render_template_string
 from pymongo import MongoClient
 from io import BytesIO
-import httpx
+from PIL import Image
+from openai import AzureOpenAI
 
 # Configuration
 app = Flask(__name__)
@@ -30,6 +30,13 @@ AZURE_OPENAI_ENDPOINT = os.getenv('AZURE_OPENAI_ENDPOINT', 'https://opendalle.op
 AZURE_OPENAI_API_KEY = os.getenv('AZURE_OPENAI_API_KEY')
 if not AZURE_OPENAI_API_KEY:
     raise ValueError("AZURE_OPENAI_API_KEY environment variable is not set")
+
+# Initialize Azure OpenAI client
+client = AzureOpenAI(
+    api_version="2024-02-01",
+    api_key=AZURE_OPENAI_API_KEY,
+    azure_endpoint=AZURE_OPENAI_ENDPOINT
+)
 
 def send_message(chat_id, text):
     url = f'{TELEGRAM_API_URL}/sendMessage'
@@ -58,19 +65,16 @@ def get_openai_response(query):
     return result['choices'][0]['text'].strip()
 
 def generate_dalle_image(prompt):
-    headers = {
-        'Content-Type': 'application/json',
-        'api-key': AZURE_OPENAI_API_KEY,
-    }
-    data = {
-        "prompt": prompt,
-        "n": 1,
-        "size": "1024x1024"
-    }
-    response = httpx.post(f'{AZURE_OPENAI_ENDPOINT}/openai/images/generations:generate', headers=headers, json=data)
-    response.raise_for_status()
-    result = response.json()
-    image_url = result['data'][0]['url']
+    # Generate image using DALL-E 3
+    result = client.images.generate(
+        model="dalle3",  # DALL-E 3 deployment
+        prompt=prompt,
+        n=1
+    )
+
+    # Extract image URL from response
+    image_url = result.data[0].url
+
     return image_url
 
 @app.route('/', methods=['GET'])
@@ -96,20 +100,13 @@ def webhook():
                 send_message(chat_id, answer)
             else:
                 send_message(chat_id, "Please provide a query after the /ask command.")
-        elif text.startswith('/dalle2'):
-            query = text[len('/dalle2 '):].strip()
+        elif text.startswith('/dalle2') or text.startswith('/image'):
+            query = text[len('/dalle2 '):].strip() if text.startswith('/dalle2') else text[len('/image '):].strip()
             if query:
                 image_url = generate_dalle_image(query)
                 send_image(chat_id, image_url)
             else:
-                send_message(chat_id, "Please provide a query after the /dalle2 command.")
-        elif text.startswith('/image'):
-            query = text[len('/image '):].strip()
-            if query:
-                image_url = generate_dalle_image(query)
-                send_image(chat_id, image_url)
-            else:
-                send_message(chat_id, "Please provide a query after the /image command.")
+                send_message(chat_id, "Please provide a query after the /dalle2 or /image command.")
         elif text == '/start':
             send_message(chat_id, "Bot is Working")
 
