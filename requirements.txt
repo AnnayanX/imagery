@@ -4,3 +4,4 @@ requests==2.28.2
 python-telegram-bot
 Pillow==9.4.0  # Pillow for image processing
 httpx==0.24.0
+pymongo==4.3.3
