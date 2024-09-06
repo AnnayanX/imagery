@@ -1,5 +1,6 @@
 import os
 import requests
+import datetime
 from flask import Flask, request, jsonify
 from pymongo import MongoClient
 from openai import get_openai_response, process_dalle_request, send_message
@@ -9,8 +10,8 @@ app = Flask(__name__)
 # MongoDB configuration
 MONGO_URI = os.getenv('MONGO_URI')
 client = MongoClient(MONGO_URI)
-db = client.get_database()  # Use default database or specify one
-collection = db.get_collection('messages')  # Specify your collection
+db = client.get_database()
+collection = db.get_collection('messages')
 
 # Telegram API configuration
 TELEGRAM_API_TOKEN = os.getenv('TELEGRAM_API_TOKEN')
@@ -23,8 +24,7 @@ def webhook():
     text = data.get('message', {}).get('text', '')
 
     if not chat_id or not text:
-        send_message(chat_id, "Received invalid data in webhook")
-        return jsonify(success=False), 400
+        return jsonify(success=False, message="Received invalid data in webhook"), 400
 
     try:
         if text.startswith('/ask'):
@@ -37,14 +37,14 @@ def webhook():
         elif text.startswith('/dalle2'):
             query = text[len('/dalle2 '):].strip()
             if query:
-                image_url = process_dalle_request(query, 'dalle2', chat_id)
+                image_url = process_dalle_request(query, 'dalle2')
                 send_message(chat_id, f"Image URL: {image_url}")
             else:
                 send_message(chat_id, "Please provide a query after the /dalle2 command.")
         elif text.startswith('/image'):
             query = text[len('/image '):].strip()
             if query:
-                image_url = process_dalle_request(query, 'image', chat_id)
+                image_url = process_dalle_request(query, 'image')
                 send_message(chat_id, f"Image URL: {image_url}")
             else:
                 send_message(chat_id, "Please provide a query after the /image command.")
@@ -59,7 +59,10 @@ def webhook():
         })
 
     except Exception as e:
-        send_message(chat_id, f"Error processing message: {e}")
+        error_message = f"Error processing message: {e}"
+        send_message(chat_id, error_message)
+        app.logger.error(error_message, exc_info=True)
+        return jsonify(success=False, message="An internal error occurred"), 500
 
     return jsonify(success=True)
 
