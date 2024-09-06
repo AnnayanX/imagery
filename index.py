@@ -16,11 +16,6 @@ collection = db.get_collection('messages')  # Specify your collection
 TELEGRAM_API_TOKEN = os.getenv('TELEGRAM_API_TOKEN')
 TELEGRAM_API_URL = f'https://api.telegram.org/bot{TELEGRAM_API_TOKEN}'
 
-def send_message(chat_id, text):
-    url = f'{TELEGRAM_API_URL}/sendMessage'
-    response = requests.post(url, data={'chat_id': chat_id, 'text': text})
-    return response.json()
-
 @app.route('/webhook', methods=['POST'])
 def webhook():
     data = request.get_json()
