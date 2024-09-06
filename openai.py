@@ -45,15 +45,10 @@ def generate_dalle3_image(query):
     else:
         return f"Error: {response.status_code} - {response.text}"
 
-# Utility function to save image from URL
-def save_image_from_url(image_url, filename):
+# Retrieve image from URL and convert to bytes
+def get_image_bytes(image_url):
     image_content = httpx.get(image_url).content
-    image = Image.open(BytesIO(image_content))
-    image_path = os.path.join(os.curdir, 'images', filename)
-    if not os.path.isdir(os.path.dirname(image_path)):
-        os.makedirs(os.path.dirname(image_path))
-    image.save(image_path)
-    return image_path
+    return BytesIO(image_content)
 
 # Endpoint for sending messages via Telegram
 def send_message(chat_id, text):
@@ -74,6 +69,7 @@ def process_dalle_request(query, command, chat_id):
         send_message(chat_id, image_url)
         return image_url
     
-    save_image_from_url(image_url, 'generated_image.png')
+    image_bytes = get_image_bytes(image_url)
+    # Optionally display or further process the image_bytes here if needed
     send_message(chat_id, f"Image generated successfully: {image_url}")
     return image_url
