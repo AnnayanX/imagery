@@ -1,7 +1,13 @@
 from flask import Flask, request, jsonify
-from openai import process_dalle_request, get_openai_response, send_message
+from pymongo import MongoClient
+import os
 
 app = Flask(__name__)
+
+# MongoDB connection setup
+client = MongoClient(os.getenv('MONGO_DB_URL'))
+db = client['your_database']
+collection = db['your_collection']
 
 @app.route('/')
 def index():
@@ -29,6 +35,8 @@ def webhook():
             query = text[len('/dalle2 '):].strip()
             if query:
                 image_url = process_dalle_request(query, 'dalle2', chat_id)
+                # Save image URL to MongoDB
+                collection.insert_one({'chat_id': chat_id, 'image_url': image_url, 'command': 'dalle2'})
                 send_message(chat_id, f"Image URL: {image_url}")
             else:
                 send_message(chat_id, "Please provide a query after the /dalle2 command.")
@@ -36,6 +44,8 @@ def webhook():
             query = text[len('/image '):].strip()
             if query:
                 image_url = process_dalle_request(query, 'image', chat_id)
+                # Save image URL to MongoDB
+                collection.insert_one({'chat_id': chat_id, 'image_url': image_url, 'command': 'image'})
                 send_message(chat_id, f"Image URL: {image_url}")
             else:
                 send_message(chat_id, "Please provide a query after the /image command.")
