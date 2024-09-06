@@ -1,18 +1,14 @@
 import os
-import httpx
 import requests
-from openai import AzureOpenAI
 
-# OpenAI API configuration
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
-OPENAI_ENDPOINT = os.getenv('OPENAI_ENDPOINT')
+# Azure OpenAI configuration
 AZURE_OPENAI_API_KEY = os.getenv('AZURE_OPENAI_API_KEY')
 AZURE_OPENAI_ENDPOINT = os.getenv('AZURE_OPENAI_ENDPOINT')
 
 def get_openai_response(query, retries=3, backoff_factor=1):
     headers = {
         'Content-Type': 'application/json',
-        'api-key': OPENAI_API_KEY,
+        'api-key': AZURE_OPENAI_API_KEY,
     }
 
     MAX_TOKENS = 4096
@@ -48,7 +44,7 @@ def get_openai_response(query, retries=3, backoff_factor=1):
         'max_tokens': 800
     }
 
-    url = OPENAI_ENDPOINT
+    url = f'{AZURE_OPENAI_ENDPOINT}/v1/engines/davinci-codex/completions'  # Adjust endpoint if needed
 
     for attempt in range(retries):
         try:
@@ -60,7 +56,7 @@ def get_openai_response(query, retries=3, backoff_factor=1):
                 continue
             response.raise_for_status()
             response_data = response.json()
-            answer = response_data.get('choices', [{}])[0].get('message', {}).get('content', 'No response content')
+            answer = response_data.get('choices', [{}])[0].get('text', 'No response content')
             return answer
         except requests.RequestException as e:
             if attempt == retries - 1:
@@ -74,7 +70,7 @@ def get_openai_response(query, retries=3, backoff_factor=1):
 def count_tokens(text):
     return len(text.split())
 
-def process_dalle_request(query, model_name, chat_id):
+def process_dalle_request(query, model_name):
     headers = {
         'Content-Type': 'application/json',
         'api-key': AZURE_OPENAI_API_KEY,
@@ -86,13 +82,13 @@ def process_dalle_request(query, model_name, chat_id):
     }
 
     if model_name == 'dalle2':
-        url = f'{AZURE_OPENAI_ENDPOINT}/v1/images/generations'
+        url = f'{AZURE_OPENAI_ENDPOINT}/v1/images/generations'  # Adjust endpoint if needed
     elif model_name == 'image':
-        url = f'{AZURE_OPENAI_ENDPOINT}/v1/images/generations'
+        url = f'{AZURE_OPENAI_ENDPOINT}/v1/images/generations'  # Adjust endpoint if needed
     else:
         return "Unsupported model name."
 
-    response = httpx.post(url, headers=headers, json=payload)
+    response = requests.post(url, headers=headers, json=payload)
     response.raise_for_status()
 
     response_data = response.json()
