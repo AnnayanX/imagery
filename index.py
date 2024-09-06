@@ -3,23 +3,45 @@ import requests
 import datetime
 from flask import Flask, request, jsonify
 from pymongo import MongoClient
-from openai import get_openai_response, process_dalle_request, send_message
 
+# Configuration
 app = Flask(__name__)
 
 # MongoDB configuration
-MONGO_URI = os.getenv('MONGO_URI')
+MONGO_URI = os.getenv('MONGO_URI')  # Ensure this URI includes the database name
+if not MONGO_URI:
+    raise ValueError("MONGO_URI environment variable is not set")
+
+# Connect to MongoDB
 client = MongoClient(MONGO_URI)
-db = client.get_database()
+db = client['mydatabase']  # Replace 'mydatabase' with your actual database name
 collection = db.get_collection('messages')
 
 # Telegram API configuration
 TELEGRAM_API_TOKEN = os.getenv('TELEGRAM_API_TOKEN')
+if not TELEGRAM_API_TOKEN:
+    raise ValueError("TELEGRAM_API_TOKEN environment variable is not set")
 TELEGRAM_API_URL = f'https://api.telegram.org/bot{TELEGRAM_API_TOKEN}'
+
+def send_message(chat_id, text):
+    url = f'{TELEGRAM_API_URL}/sendMessage'
+    response = requests.post(url, data={'chat_id': chat_id, 'text': text})
+    return response.json()
+
+def get_openai_response(query):
+    # Implement your OpenAI interaction here
+    return "This is a placeholder response from OpenAI."
+
+def process_dalle_request(query, model):
+    # Implement your DALL-E interaction here
+    # For example purposes, return a placeholder URL
+    return "https://example.com/generated_image.png"
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
     data = request.get_json()
+
+    # Extract chat_id and message text
     chat_id = data.get('message', {}).get('chat', {}).get('id')
     text = data.get('message', {}).get('text', '')
 
