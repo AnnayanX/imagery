@@ -7,6 +7,13 @@
       "config": {
         "maxLambdaSize": "50mb"
       }
+    },
+    {
+      "src": "openai.py",
+      "use": "@vercel/python",
+      "config": {
+        "maxLambdaSize": "50mb"
+      }
     }
   ],
   "routes": [
