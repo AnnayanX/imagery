@@ -1,7 +1,7 @@
 import os
 import httpx
-from PIL import Image
 import requests
+from openai import AzureOpenAI
 
 # OpenAI API configuration
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
