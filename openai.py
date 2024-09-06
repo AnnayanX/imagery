@@ -1,75 +1,106 @@
 import os
 import httpx
-from io import BytesIO
 from PIL import Image
+import requests
 
-# Set up constants
+# OpenAI API configuration
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+OPENAI_ENDPOINT = os.getenv('OPENAI_ENDPOINT')
 AZURE_OPENAI_API_KEY = os.getenv('AZURE_OPENAI_API_KEY')
 AZURE_OPENAI_ENDPOINT = os.getenv('AZURE_OPENAI_ENDPOINT')
-DALLE2_ENDPOINT = f'{AZURE_OPENAI_ENDPOINT}/dalle2'
-DALLE3_ENDPOINT = f'{AZURE_OPENAI_ENDPOINT}/dalle3'
 
-# Generate DALL-E 2 Image
-def generate_dalle2_image(query):
+def get_openai_response(query, retries=3, backoff_factor=1):
     headers = {
         'Content-Type': 'application/json',
-        'api-key': AZURE_OPENAI_API_KEY
+        'api-key': OPENAI_API_KEY,
     }
+
+    MAX_TOKENS = 4096
+    MAX_INPUT_TOKENS = MAX_TOKENS - 800
+
+    input_tokens = count_tokens(query)
+    if input_tokens > MAX_INPUT_TOKENS:
+        query = ' '.join(query.split()[:MAX_INPUT_TOKENS])
+
+    payload = {
+        'messages': [
+            {
+                'role': 'system',
+                'content': [
+                    {
+                        'type': 'text',
+                        'text': 'You are an AI assistant that helps people find information.'
+                    }
+                ]
+            },
+            {
+                'role': 'user',
+                'content': [
+                    {
+                        'type': 'text',
+                        'text': query
+                    }
+                ]
+            }
+        ],
+        'temperature': 0.7,
+        'top_p': 0.95,
+        'max_tokens': 800
+    }
+
+    url = OPENAI_ENDPOINT
+
+    for attempt in range(retries):
+        try:
+            response = requests.post(url, headers=headers, json=payload)
+            if response.status_code == 429:
+                wait_time = backoff_factor * (2 ** attempt)
+                print(f"Rate limit exceeded. Waiting for {wait_time} seconds.")
+                time.sleep(wait_time)
+                continue
+            response.raise_for_status()
+            response_data = response.json()
+            answer = response_data.get('choices', [{}])[0].get('message', {}).get('content', 'No response content')
+            return answer
+        except requests.RequestException as e:
+            if attempt == retries - 1:
+                return f"Failed to make the request. Error: {e}"
+            wait_time = backoff_factor * (2 ** attempt)
+            print(f"Request failed. Waiting for {wait_time} seconds before retrying.")
+            time.sleep(wait_time)
+
+    return "Failed to get a response after several attempts."
+
+def count_tokens(text):
+    return len(text.split())
+
+def process_dalle_request(query, model_name, chat_id):
+    headers = {
+        'Content-Type': 'application/json',
+        'api-key': AZURE_OPENAI_API_KEY,
+    }
+
     payload = {
         'prompt': query,
         'n': 1
     }
-    
-    response = httpx.post(DALLE2_ENDPOINT, headers=headers, json=payload)
-    if response.status_code == 200:
-        image_url = response.json().get('data', [{}])[0].get('url', '')
-        return image_url
+
+    if model_name == 'dalle2':
+        url = f'{AZURE_OPENAI_ENDPOINT}/v1/images/generations'
+    elif model_name == 'image':
+        url = f'{AZURE_OPENAI_ENDPOINT}/v1/images/generations'
     else:
-        return f"Error: {response.status_code} - {response.text}"
+        return "Unsupported model name."
 
-# Generate DALL-E 3 Image
-def generate_dalle3_image(query):
-    headers = {
-        'Content-Type': 'application/json',
-        'api-key': AZURE_OPENAI_API_KEY
-    }
-    payload = {
-        'prompt': query,
-        'n': 1
-    }
-    
-    response = httpx.post(DALLE3_ENDPOINT, headers=headers, json=payload)
-    if response.status_code == 200:
-        image_url = response.json().get('data', [{}])[0].get('url', '')
-        return image_url
-    else:
-        return f"Error: {response.status_code} - {response.text}"
+    response = httpx.post(url, headers=headers, json=payload)
+    response.raise_for_status()
 
-# Retrieve image from URL and convert to bytes
-def get_image_bytes(image_url):
-    image_content = httpx.get(image_url).content
-    return BytesIO(image_content)
-
-# Endpoint for sending messages via Telegram
-def send_message(chat_id, text):
-    url = f'https://api.telegram.org/bot{os.getenv("TELEGRAM_API_TOKEN")}/sendMessage'
-    response = httpx.post(url, data={'chat_id': chat_id, 'text': text})
-    return response.json()
-
-def process_dalle_request(query, command, chat_id):
-    if command == 'dalle2':
-        image_url = generate_dalle2_image(query)
-    elif command == 'image':
-        image_url = generate_dalle3_image(query)
-    else:
-        send_message(chat_id, "Unknown command.")
-        return "Unknown command."
-    
-    if "Error:" in image_url:
-        send_message(chat_id, image_url)
-        return image_url
-    
-    image_bytes = get_image_bytes(image_url)
-    # Optionally display or further process the image_bytes here if needed
-    send_message(chat_id, f"Image generated successfully: {image_url}")
+    response_data = response.json()
+    image_url = response_data.get('data', [{}])[0].get('url', '')
     return image_url
+
+def send_message(chat_id, text):
+    TELEGRAM_API_TOKEN = os.getenv('TELEGRAM_API_TOKEN')
+    TELEGRAM_API_URL = f'https://api.telegram.org/bot{TELEGRAM_API_TOKEN}/sendMessage'
+    response = requests.post(TELEGRAM_API_URL, data={'chat_id': chat_id, 'text': text})
+    return response.json()
